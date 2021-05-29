@@ -1,0 +1,112 @@
+DB / Collection / Document 생성 제거 https://velopert.com/457
+
+1. DB
+
+현재 사용중인 DB 확인 : db
+
+DB 리스트 확인 : show dbs
+
+DB 생성 혹은 사용 : use DB이름 (리스트에서 보려면 최소 한개의 Docuemnt가 추가되어야 함)
+
+DB 제거 : db.dropDatabase(); (명령어 실행 전 제거할 DB를 use DB이름으로 선택한 상태여야 함)
+
+
+2. Collection
+
+생성 : db.createCollection(name, [options])
+
+    > option 종류 >> 이것도 object 형태로 넣는다 {key:value}
+    capped(Boolean) : Capped Collection 활성화 여부 >> 고정 크기 컬렉션으로 size를 넘어가면 가장 오래된 데이터를 덮어씀 (size 설정 필수)
+    autoIndex(Boolean) : _id 필드에 index를 자동 생성
+    size(number) : Capped Collection 최대 사이즈를 bytes로 지정
+    max(number) : 해당 콜렉션에 추가 가능한 최대 개수 설정
+
+    > 따로 위 createCollection을 하지 않아도 document 추가시 자동 생성 가능 (짜피 콜렉션 명 지정하므로)
+
+확인 : show collections
+
+제거 : db.콜렉션명.drop()
+
+
+3. Document
+
+추가 : insert.콜렉션명.insert(document) (document는 js object 형식)
+
+리스트 확인 : db.콜렉션명.find([query]) // query는 아래 제거의 파라미터의 criteria와 마찬가지 기준으로 생각 / 생략시 전체 확인인거임
+
+제거 : db.콜렉션명.remove(criteria, [justOne])
+    
+    > criteria : 삭제 데이터 기준 값(object형) : {} 이면 컬렉션의 모든 데이터 삭제
+
+    > justOne : true면 한개의 데이터만 제거 (default는 false)
+
+
+============================================================================================================================
+
+조회 find() 메서드 https://velopert.com/479
+
+1. db.콜렉션명.find([query], [projection]) / query는 위에서 설명 | projection은 조회할 때 보여질 field
+
+2. return값 = 해당 document들의 cursor (10분간 사용하지 않으면 반환됨) > cursor를 통해 데이터 제한 or Sort 등 가능
+
+3. db.콜렉션명.find().pretty()로 key:value를 좀 더 깔끔하게 볼 수 있다
+
+
+4. query에서는 연산자를 통해 데이터 검색이 가능 https://docs.mongodb.com/v3.2/reference/operator/query/
+
+4-1.비교연산자 : $eq / $gt / $gte / $lt / $lte / $ne (not equal) / $in (주어진 배열 안에 속하는가) / $nin (<>in)
+like의 값이 10초과 30이하 find({"like":{$gt:10, $lte:30}})
+writer 값이 배열안에 속함 find({"writer":{$in:["Alpha","Bravo"]}})
+
+4-2.논리연산자 : $or / $and / $not / $nor (모든 조건 false일때 true)
+title이 article1이거나 writer가 Alpha : find({$or:[{"title":"article1"},{"writer":"Alpha"}]})
+
+4-3.정규식 : find({ key: { $regex: /pattern/, $options: '<options>' } })
+            or find({ key:/pattern/<options> })
+
+            > option : i(대소문자 무시) / x(정규식 내 whitespace무시) / s('.' 사용시 \n을 포함해 매치) / m('^'사용시 값에 \n있다면 무시)
+
+db.articles.find( { “title” : /article0[1-2]/ } )
+
+4-4.$where연산자 : JS 표현식 사용 가능
+db.articles.find( { $where: “this.comments.length == 0” } )
+
+4-5.$elemMatch연산자 : Embedded Document 배열 : 그러니까 value에 넣은 또다른 Object (관계 연결 대신 쓴거)기 {}, {} 배열을 이루는 경우 / 내부를 쿼리할 때 사용
+comments : {name:~}, {name~}, {name~}
+db.articles.find( { “comments”: { $elemMatch: { “name”: “Charlie” } } } ) 내부에 comments key에서 name이 Charlie인 Document 조회
+
+만약 그냥 Embedded Document라면 find({key.key:vlaue})로 key.내부key로 찾음
+
+만약 value가 그냥 배열({}가 아닌 [])인 경우 해당 요소를 find({key:value})로 찾는다
+
+
+
+5. projection : find()의 두번째 파라미터
+find( { } , { “_id”: false, “title”: true, “content”: true } )
+
+이런식으로 {field : true, ~} 보여줄 필드만 설정함
+
+5-1. projection 연산자
+
+$slice : Embedded Document 배열을 읽을 때 몇개까지 보일지 (limit) 설정을 함
+find( { “title”: “article03” }, { comments: { $slice: 1 } } ) aritcle03의 comments 중 한개만 보여줌\
+
+$elemMatch
+
+find(
+...     {
+...         "comments": {
+...             $elemMatch: { "name": "Charlie" }
+...         }
+...     },
+...     {
+...         "title": true,
+...         "comments": {
+...             $elemMatch: { "name": "Charlie" }
+...         },
+...         "comments.name": true,
+...         "comments.message": true
+})
+
+>> query에서 코맨트에 이름이 찰리인 것만 추출
+>> 거기서 projection으로 코맨트의 제목과 이름, 댓글 내용만 출력 | 만약 projection의 $elemMatch: { "name": "Charlie" }로 다시 설정을 하지 않았다면 의도와는 다르게 다른 이의 댓글정보도 나올 수 있음
